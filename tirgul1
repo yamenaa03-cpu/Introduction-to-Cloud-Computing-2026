@@ -128,16 +128,37 @@ def update_program(b):
             show_student_info()
             return
 
-        # פרטי הסטודנט הנבחר
         student = students[selected]
 
-        # מוסיפים שורה חדשה לקובץ בלי למחוק את הישנה
-        new_line = f"{student['name']} , {student['email']} , {student['course']} , {new_program}\n"
+        # read all lines
+        with open(file_path, 'r', encoding='utf-8') as f:
+            lines = f.readlines()
 
-        with open(file_path, 'a', encoding='utf-8') as f:
-            f.write(new_line)
+        updated_lines = []
 
-        # מעדכנים גם בזיכרון
+        for line in lines:
+            stripped = line.strip()
+            if not stripped:
+                continue
+
+            parts = [p.strip() for p in stripped.split(',')]
+
+            if len(parts) >= 3:
+                name = parts[0]
+                email = parts[1]
+
+                # if this is the selected student, replace only the favorite program
+                if name == student['name'] and email == student['email']:
+                    updated_line = f"{student['name']} , {student['email']} , {student['course']} , {new_program}\n"
+                    updated_lines.append(updated_line)
+                else:
+                    updated_lines.append(line)
+
+        # write all lines back to the file
+        with open(file_path, 'w', encoding='utf-8') as f:
+            f.writelines(updated_lines)
+
+        # update memory
         students[selected]['favorite_program'] = new_program
 
         display(HTML(f"""
@@ -151,31 +172,13 @@ def update_program(b):
             margin-bottom:10px;
             direction:rtl;
             text-align:right;">
-            העדכון נשמר בהצלחה ונוספה שורה חדשה לקובץ
+            התוכנית האהובה עודכנה בהצלחה
         </div>
         """))
 
-        display(HTML(f"""
-        <div style="
-            border: 2px solid #4facfe;
-            border-radius: 15px;
-            padding: 20px;
-            width: 520px;
-            background-color: #f9fbff;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.12);
-            font-family: Arial;
-            direction: rtl;
-            text-align: right;">
-            <h3 style="color:#2c3e50; margin-top:0;">פרטי הסטודנט לאחר העדכון</h3>
-            <p><b>שם:</b> {student['name']}</p>
-            <p><b>אימייל:</b> {student['email']}</p>
-            <p><b>קורס:</b> {student['course']}</p>
-            <p><b>תוכנית אהובה:</b> {new_program}</p>
-        </div>
-        """))
-
+        show_student_info()
         program_text.value = ''
-
+        
 student_dropdown.observe(show_student_info, names='value')
 update_button.on_click(update_program)
 
