@@ -1,0 +1,183 @@
+from google.colab import drive
+drive.mount('/content/drive')
+
+import ipywidgets as widgets
+from IPython.display import display, HTML, clear_output
+
+# נתיב לקובץ
+file_path = '/content/drive/MyDrive/students.txt'
+
+# פונקציה לקריאת הסטודנטים מהקובץ
+def load_students(file_path):
+    students = {}
+
+    with open(file_path, 'r', encoding='utf-8') as f:
+        lines = f.readlines()
+
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
+
+        parts = [p.strip() for p in line.split(',')]
+
+        # אם יש לפחות שם, מייל, קורס
+        if len(parts) >= 3:
+            name = parts[0]
+            email = parts[1]
+            course = parts[2]
+
+            # אם כבר נוספה תוכנית אהובה בשורה מסוימת
+            favorite_program = parts[3] if len(parts) >= 4 else "לא עודכן"
+
+            students[name] = {
+                "name": name,
+                "email": email,
+                "course": course,
+                "favorite_program": favorite_program
+            }
+
+    return students
+
+students = load_students(file_path)
+
+# כותרת
+title = widgets.HTML(
+    value="""
+    <div style="
+        background: linear-gradient(90deg, #4facfe, #00c6ff);
+        padding: 16px;
+        border-radius: 14px;
+        text-align: center;
+        color: white;
+        font-size: 24px;
+        font-weight: bold;
+        margin-bottom: 15px;">
+        טופס פרטי סטודנטים
+    </div>
+    """
+)
+
+# תיבת בחירה
+student_dropdown = widgets.Dropdown(
+    options=list(students.keys()),
+    description='בחר סטודנט:',
+    style={'description_width': 'initial'},
+    layout=widgets.Layout(width='450px')
+)
+
+# תיבת טקסט לתוכנית אהובה
+program_text = widgets.Text(
+    value='',
+    placeholder='הכנס תוכנית אהובה',
+    description='תוכנית אהובה:',
+    style={'description_width': 'initial'},
+    layout=widgets.Layout(width='450px')
+)
+
+# כפתור עדכון
+update_button = widgets.Button(
+    description='עדכון',
+    button_style='success',
+    layout=widgets.Layout(width='150px', height='40px')
+)
+
+# אזור תצוגה
+output = widgets.Output()
+
+# פונקציה להצגת פרטי הסטודנט
+def show_student_info(change=None):
+    with output:
+        clear_output()
+        selected = student_dropdown.value
+        info = students[selected]
+
+        display(HTML(f"""
+        <div style="
+            border: 2px solid #4facfe;
+            border-radius: 15px;
+            padding: 20px;
+            width: 520px;
+            background-color: #f9fbff;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+            font-family: Arial;
+            direction: rtl;
+            text-align: right;">
+            <h3 style="color:#2c3e50; margin-top:0;">פרטי הסטודנט</h3>
+            <p><b>שם:</b> {info['name']}</p>
+            <p><b>אימייל:</b> {info['email']}</p>
+            <p><b>קורס:</b> {info['course']}</p>
+            <p><b>תוכנית אהובה:</b> {info['favorite_program']}</p>
+        </div>
+        """))
+
+# פונקציה לעדכון והוספה לקובץ
+def update_program(b):
+    selected = student_dropdown.value
+    new_program = program_text.value.strip()
+
+    with output:
+        clear_output()
+
+        if new_program == '':
+            display(HTML("""
+            <div style="color:red; font-weight:bold; direction:rtl;">
+                יש להזין תוכנית אהובה לפני העדכון
+            </div>
+            """))
+            show_student_info()
+            return
+
+        # פרטי הסטודנט הנבחר
+        student = students[selected]
+
+        # מוסיפים שורה חדשה לקובץ בלי למחוק את הישנה
+        new_line = f"{student['name']} , {student['email']} , {student['course']} , {new_program}\n"
+
+        with open(file_path, 'a', encoding='utf-8') as f:
+            f.write(new_line)
+
+        # מעדכנים גם בזיכרון
+        students[selected]['favorite_program'] = new_program
+
+        display(HTML(f"""
+        <div style="
+            background-color:#e8f5e9;
+            color:#2e7d32;
+            border:1px solid #81c784;
+            border-radius:10px;
+            padding:12px;
+            width:520px;
+            margin-bottom:10px;
+            direction:rtl;
+            text-align:right;">
+            העדכון נשמר בהצלחה ונוספה שורה חדשה לקובץ
+        </div>
+        """))
+
+        display(HTML(f"""
+        <div style="
+            border: 2px solid #4facfe;
+            border-radius: 15px;
+            padding: 20px;
+            width: 520px;
+            background-color: #f9fbff;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+            font-family: Arial;
+            direction: rtl;
+            text-align: right;">
+            <h3 style="color:#2c3e50; margin-top:0;">פרטי הסטודנט לאחר העדכון</h3>
+            <p><b>שם:</b> {student['name']}</p>
+            <p><b>אימייל:</b> {student['email']}</p>
+            <p><b>קורס:</b> {student['course']}</p>
+            <p><b>תוכנית אהובה:</b> {new_program}</p>
+        </div>
+        """))
+
+        program_text.value = ''
+
+student_dropdown.observe(show_student_info, names='value')
+update_button.on_click(update_program)
+
+display(title, student_dropdown, program_text, update_button, output)
+show_student_info()
