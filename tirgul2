@@ -1,0 +1,58 @@
+from google.colab import drive
+drive.mount('/content/drive')
+
+
+import json
+file_path = "/content/drive/MyDrive/students.json"
+students = [
+    {
+        "first_name": "Aya",
+        "last_name": "Saeed",
+        "email": "aya.saeed@e.braude.ac.il",
+        "courses": ["introduction to cloud computing"],
+    },
+    {
+        "first_name": "Esa",
+        "last_name": "Shibli",
+        "email": "Esa.shibli@e.braude.ac.il",
+        "courses": ["introduction to cloud computing"],
+    },
+    {
+        "first_name": "Yamen",
+        "last_name": "abu ahmad",
+        "email": "Yamen,abu,ahmad.wawi@e.braude.ac.il",
+        "courses": ["introduction to cloud computing"],
+    }
+]
+with open(file_path, "w", encoding="utf-8") as file:
+    json.dump(students, file, indent=4)
+
+
+import pandas as pd
+with open(file_path, "r", encoding="utf-8") as file:
+    data = json.load(file)
+df = pd.DataFrame(data)
+print(df)
+
+
+
+name = input("הכניסי שם: ")
+
+for student in data:
+    if student["first_name"].lower() == name.lower():
+        print("student info: \n")
+        print(student)
+
+
+# תא נוסף לעדכון תוכנית אהובה
+
+favorite_program = input("favorite program: ")
+
+for student in data:
+    if student["first_name"].lower() == name.lower():
+        student["favorite_program"] = favorite_program
+        break
+
+with open(file_path, "w", encoding="utf-8") as file:
+    json.dump(data, file, indent=4, ensure_ascii=False)
+
