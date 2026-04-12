@@ -1,0 +1,261 @@
+pip install firebase-admin
+from google.colab import files
+files.upload()
+import firebase_admin
+from firebase_admin import credentials, db
+
+if not firebase_admin._apps:
+    cred = credentials.Certificate("serviceAccountKey.json")
+    firebase_admin.initialize_app(cred, {
+        'databaseURL': 'https://tirgul3-2af57-default-rtdb.firebaseio.com/'
+    })
+def add_word(word):
+    word = word.lower()
+    ref = db.reference("words/" + word)
+    current_value = ref.get()
+
+    if current_value is None:
+        ref.set(1)
+    else:
+        ref.set(current_value + 1)
+def add_text(text):
+    words = text.split()
+    for word in words:
+        add_word(word)
+def update_word(word, count):
+    word = word.lower()
+    ref = db.reference("words/" + word)
+    ref.set(count)
+def delete_word(word):
+    word = word.lower()
+    ref = db.reference("words/" + word)
+    ref.delete()
+def view_words():
+    ref = db.reference("words")
+    data = ref.get()
+
+    if data is None:
+        print("No words found.")
+    else:
+        for word, count in data.items():
+            print(f"{word}: {count}")
+while True:
+    print("\nMenu:")
+    print("1. Add single word")
+    print("2. Add text")
+    print("3. Update word")
+    print("4. Delete word")
+    print("5. View all words")
+    print("6. Exit")
+
+    choice = input("Choose: ")
+
+    if choice == "1":
+        word = input("Enter word: ")
+        add_word(word)
+
+    elif choice == "2":
+        text = input("Enter text: ")
+        add_text(text)
+
+    elif choice == "3":
+        word = input("Enter word: ")
+        count = int(input("Enter new count: "))
+        update_word(word, count)
+
+    elif choice == "4":
+        word = input("Enter word to delete: ")
+        delete_word(word)
+
+    elif choice == "5":
+        view_words()
+
+    elif choice == "6":
+        print("Goodbye!")
+        break
+
+    else:
+        print("Invalid option.")
+
+
+
+
+//code with HTML
+
+
+import firebase_admin
+from firebase_admin import credentials, db
+import ipywidgets as widgets
+from IPython.display import display, clear_output
+import re
+
+# -------------------------------
+# Firebase init
+# -------------------------------
+if not firebase_admin._apps:
+    cred = credentials.Certificate("serviceAccountKey.json")
+    firebase_admin.initialize_app(cred, {
+        'databaseURL': 'https://tirgul3-2af57-default-rtdb.firebaseio.com/'
+    })
+
+# -------------------------------
+# Helper functions
+# -------------------------------
+def clean_word(word):
+    return re.sub(r"[^\w]", "", word.strip().lower())
+
+def add_single_word(word):
+    word = clean_word(word)
+    if not word:
+        return "No valid word entered."
+
+    ref = db.reference("words/" + word)
+    current_value = ref.get()
+
+    if current_value is None:
+        ref.set(1)
+    else:
+        ref.set(current_value + 1)
+
+    return f'Word "{word}" added successfully.'
+
+def add_text_words(text):
+    words = text.split()
+    added = 0
+
+    for word in words:
+        clean = clean_word(word)
+        if clean:
+            ref = db.reference("words/" + clean)
+            current_value = ref.get()
+            if current_value is None:
+                ref.set(1)
+            else:
+                ref.set(current_value + 1)
+            added += 1
+
+    return f"Added {added} words from text."
+
+def update_word_count(word, count):
+    word = clean_word(word)
+    if not word:
+        return "No valid word entered."
+
+    if count < 0:
+        return "Count must be 0 or more."
+
+    ref = db.reference("words/" + word)
+    ref.set(count)
+    return f'Word "{word}" updated to count {count}.'
+
+def delete_word_from_db(word):
+    word = clean_word(word)
+    if not word:
+        return "No valid word entered."
+
+    ref = db.reference("words/" + word)
+    if ref.get() is None:
+        return f'Word "{word}" does not exist.'
+
+    ref.delete()
+    return f'Word "{word}" deleted successfully.'
+
+def get_all_words():
+    ref = db.reference("words")
+    data = ref.get()
+
+    if not data:
+        return "No words found."
+
+    lines = []
+    for word, count in sorted(data.items()):
+        lines.append(f"{word}: {count}")
+    return "\n".join(lines)
+
+# -------------------------------
+# Widgets
+# -------------------------------
+title = widgets.HTML("<h2>Common Words Counter</h2>")
+
+word_input = widgets.Text(
+    description="Word:",
+    placeholder="Enter one word"
+)
+
+text_input = widgets.Textarea(
+    description="Text:",
+    placeholder="Enter text for analysis",
+    layout=widgets.Layout(width="500px", height="100px")
+)
+
+count_input = widgets.IntText(
+    description="Count:",
+    value=1
+)
+
+add_word_btn = widgets.Button(description="Add Word", button_style="success")
+add_text_btn = widgets.Button(description="Add Text", button_style="success")
+update_btn = widgets.Button(description="Update Count", button_style="warning")
+delete_btn = widgets.Button(description="Delete Word", button_style="danger")
+view_btn = widgets.Button(description="View All Words", button_style="info")
+clear_btn = widgets.Button(description="Clear Output")
+
+output = widgets.Output(layout={
+    "border": "1px solid gray",
+    "padding": "10px",
+    "width": "700px",
+    "height": "250px",
+    "overflow_y": "auto"
+})
+
+# -------------------------------
+# Button actions
+# -------------------------------
+def show_message(message):
+    with output:
+        clear_output()
+        print(message)
+
+def on_add_word_clicked(b):
+    show_message(add_single_word(word_input.value))
+
+def on_add_text_clicked(b):
+    show_message(add_text_words(text_input.value))
+
+def on_update_clicked(b):
+    show_message(update_word_count(word_input.value, count_input.value))
+
+def on_delete_clicked(b):
+    show_message(delete_word_from_db(word_input.value))
+
+def on_view_clicked(b):
+    show_message(get_all_words())
+
+def on_clear_clicked(b):
+    with output:
+        clear_output()
+
+add_word_btn.on_click(on_add_word_clicked)
+add_text_btn.on_click(on_add_text_clicked)
+update_btn.on_click(on_update_clicked)
+delete_btn.on_click(on_delete_clicked)
+view_btn.on_click(on_view_clicked)
+clear_btn.on_click(on_clear_clicked)
+
+# -------------------------------
+# Layout
+# -------------------------------
+buttons_row1 = widgets.HBox([add_word_btn, add_text_btn])
+buttons_row2 = widgets.HBox([update_btn, delete_btn, view_btn, clear_btn])
+
+ui = widgets.VBox([
+    title,
+    word_input,
+    count_input,
+    text_input,
+    buttons_row1,
+    buttons_row2,
+    output
+])
+
+display(ui)
