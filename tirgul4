@@ -1,0 +1,32 @@
+import pandas as pd
+
+url = "https://data.gov.il/api/3/action/datastore_search?resource_id=053cea08-09bc-40ec-8f7a-156f0677aff3&limit=50000"
+
+data = pd.read_json(url)
+df = pd.DataFrame(data['result']['records'])
+
+df.head()
+df.describe(include='all')
+df.describe()
+df.info()
+df.isnull().sum()   # ערכים חסרים
+df.nunique()        # ערכים ייחודיים
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+# נניח שזה שם העמודה:
+year_col = 'shnat_yitzur'
+
+cars_per_year = df[year_col].value_counts().sort_index()
+
+plt.figure(figsize=(10,5))
+cars_per_year.plot(kind='line')
+plt.title("Number of cars per year")
+plt.xlabel("Year")
+plt.ylabel("Count")
+plt.grid()
+plt.show()
+import plotly.express as px
+
+fig = px.sunburst(df, path=['tozeret_nm', 'degem_nm'], title="Car Distribution")
+fig.show()
