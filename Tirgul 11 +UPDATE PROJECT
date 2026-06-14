@@ -1,0 +1,450 @@
+# =====================================================
+# SCREEN 4: PLANT HEALTH DASHBOARD FROM FIREBASE DB
+# WITH SPARK MAPREDUCE + PLANT CARE AGENT
+# =====================================================
+
+import requests
+import pandas as pd
+import matplotlib.pyplot as plt
+import ipywidgets as widgets
+from ipywidgets import Layout
+from IPython.display import display
+from pyspark.sql import SparkSession
+
+# =====================================================
+# 1) FIREBASE CONFIG
+# =====================================================
+
+FIREBASE_DB_URL = "https://smart-tomato-care-default-rtdb.firebaseio.com"
+SENSOR_HISTORY_PATH = f"{FIREBASE_DB_URL}/sensor_history.json"
+
+# =====================================================
+# 2) SPARK SESSION - BIG DATA ENGINE
+# =====================================================
+
+spark = SparkSession.builder \
+    .appName("Plant Health Big Data Dashboard") \
+    .getOrCreate()
+
+# =====================================================
+# 3) LOAD DATA FROM FIREBASE
+# =====================================================
+
+def load_sensor_history(limit=50):
+    try:
+        response = requests.get(SENSOR_HISTORY_PATH, timeout=20)
+        data = response.json()
+
+        if not data:
+            return []
+
+        samples = list(data.values())
+        samples.sort(key=lambda x: x.get("sensor_timestamp", ""))
+
+        return samples[-limit:]
+
+    except Exception as e:
+        print("Firebase load error:", e)
+        return []
+
+def to_float(value):
+    try:
+        return float(value)
+    except:
+        return None
+
+# =====================================================
+# 4) BIG DATA ANALYSIS WITH SPARK + MAPREDUCE
+# =====================================================
+
+def calc_stats(samples, field):
+    clean_samples = []
+
+    for s in samples:
+        val = to_float(s.get(field))
+        if val is not None:
+            clean_samples.append((field, val))
+
+    if not clean_samples:
+        return {
+            "latest": "N/A",
+            "avg": "N/A",
+            "min": "N/A",
+            "max": "N/A"
+        }
+
+    # MAP step:
+    # Convert each sensor reading into (sensor_name, value)
+    rdd = spark.sparkContext.parallelize(clean_samples)
+
+    # REDUCE step for MAX
+    max_value = rdd.reduceByKey(lambda a, b: max(a, b)).collect()[0][1]
+
+    # REDUCE step for MIN
+    min_value = rdd.reduceByKey(lambda a, b: min(a, b)).collect()[0][1]
+
+    # Average using Spark
+    values_rdd = rdd.map(lambda x: x[1])
+    avg_value = values_rdd.sum() / values_rdd.count()
+
+    latest_value = clean_samples[-1][1]
+
+    return {
+        "latest": round(latest_value, 2),
+        "avg": round(avg_value, 2),
+        "min": round(min_value, 2),
+        "max": round(max_value, 2)
+    }
+
+# =====================================================
+# 5) PLANT CARE AGENT LOGIC
+# =====================================================
+
+def plant_care_agent(temp, humidity, soil):
+    """
+    Agent logic:
+    The agent receives sensor data, analyzes the plant condition,
+    calculates a risk score, decides the plant status,
+    and returns reasons + suggested actions.
+    """
+
+    risk = 0
+    reasons = []
+    actions = []
+
+    # Analyze temperature
+    if temp != "N/A":
+        if temp >= 35:
+            risk += 35
+            reasons.append("High temperature detected.")
+            actions.append("Move the plant to a cooler place or improve ventilation.")
+        elif temp >= 32:
+            risk += 20
+            reasons.append("Temperature is slightly high.")
+            actions.append("Monitor the temperature more frequently.")
+
+    # Analyze humidity
+    if humidity != "N/A":
+        if humidity < 35:
+            risk += 25
+            reasons.append("Humidity is low.")
+            actions.append("Increase air humidity around the plant.")
+        elif humidity > 85:
+            risk += 20
+            reasons.append("Humidity is too high.")
+            actions.append("Improve airflow to prevent fungal diseases.")
+
+    # Analyze soil moisture
+    if soil != "N/A":
+        if soil < 30:
+            risk += 35
+            reasons.append("Soil moisture is very low.")
+            actions.append("Water the plant immediately.")
+        elif soil < 45:
+            risk += 20
+            reasons.append("Soil moisture is dropping.")
+            actions.append("Check if watering is needed soon.")
+
+    risk = min(risk, 100)
+
+    if risk < 30:
+        status = "Healthy"
+        icon = "🟢"
+        color = "#16a34a"
+        reasons = reasons or ["Sensor readings are within a normal range."]
+        actions = actions or ["Continue regular monitoring."]
+    elif risk < 60:
+        status = "Needs Attention"
+        icon = "🟠"
+        color = "#f97316"
+    else:
+        status = "High Risk"
+        icon = "🔴"
+        color = "#dc2626"
+
+    return risk, status, icon, color, reasons, actions
+
+# =====================================================
+# 6) STYLE
+# =====================================================
+
+dashboard_style = widgets.HTML("""
+<style>
+.dashboard-shell {
+    background: linear-gradient(135deg, #f8fafc 0%, #f0fdf4 100%);
+    border-radius: 30px;
+    padding: 34px;
+    border: 1px solid #e5e7eb;
+    font-family: Arial, sans-serif;
+}
+
+.dash-title {
+    font-size: 36px;
+    font-weight: 900;
+    color: #14532d;
+    margin-bottom: 6px;
+}
+
+.dash-subtitle {
+    font-size: 15px;
+    color: #64748b;
+    margin-bottom: 28px;
+}
+
+.dash-card {
+    background: white;
+    border-radius: 26px;
+    padding: 26px;
+    border: 1px solid #e5e7eb;
+    box-shadow: 0 14px 34px rgba(15,23,42,0.07);
+}
+
+.metric-card {
+    background: linear-gradient(180deg,#ffffff,#f8fafc);
+    border-radius: 22px;
+    padding: 22px;
+    border: 1px solid #e5e7eb;
+    box-shadow: 0 8px 20px rgba(15,23,42,0.05);
+}
+
+.metric-title {
+    font-size: 14px;
+    color: #64748b;
+    font-weight: 800;
+}
+
+.metric-value {
+    font-size: 34px;
+    color: #14532d;
+    font-weight: 900;
+    margin-top: 8px;
+}
+
+.metric-small {
+    font-size: 12px;
+    color: #64748b;
+    margin-top: 8px;
+    line-height: 1.6;
+}
+
+.refresh-dashboard-btn {
+    background: linear-gradient(180deg, #22c55e 0%, #166534 100%) !important;
+    color: white !important;
+    font-weight: 800 !important;
+    border-radius: 14px !important;
+    border: none !important;
+}
+
+.recommend-box {
+    background:#f0fdf4;
+    border-left:5px solid #22c55e;
+    border-radius:14px;
+    padding:16px;
+    color:#14532d;
+    font-weight:700;
+    line-height:1.7;
+}
+</style>
+""")
+
+# =====================================================
+# 7) UI ELEMENTS
+# =====================================================
+
+header = widgets.HTML("""
+<div class="dash-title">Plant Health Dashboard 🍅</div>
+<div class="dash-subtitle">
+Visual dashboard based on Firebase sensor data, analyzed using Spark MapReduce and Plant Care Agent.
+</div>
+""")
+
+summary_html = widgets.HTML()
+metrics_html = widgets.HTML()
+recommendations_html = widgets.HTML()
+chart_output = widgets.Output()
+table_output = widgets.Output()
+
+samples_slider = widgets.IntSlider(
+    value=30,
+    min=5,
+    max=100,
+    step=5,
+    description="Samples:",
+    layout=Layout(width="420px")
+)
+
+btn_refresh_dashboard = widgets.Button(
+    description="Refresh Dashboard",
+    icon="refresh",
+    layout=Layout(width="220px", height="50px")
+)
+btn_refresh_dashboard.add_class("refresh-dashboard-btn")
+
+# =====================================================
+# 8) RENDER DASHBOARD
+# =====================================================
+
+def render_dashboard(_=None):
+    samples = load_sensor_history(samples_slider.value)
+
+    if not samples:
+        summary_html.value = """
+        <div class="dash-card">
+            <h3 style="color:#dc2626;">No data found in Firebase.</h3>
+            <p>Please refresh the IoT screen first to save sensor data into the database.</p>
+        </div>
+        """
+        metrics_html.value = ""
+        recommendations_html.value = ""
+        with chart_output:
+            chart_output.clear_output()
+        with table_output:
+            table_output.clear_output()
+        return
+
+    # Big Data calculations using Spark MapReduce
+    temp_stats = calc_stats(samples, "temperature")
+    hum_stats = calc_stats(samples, "humidity")
+    soil_stats = calc_stats(samples, "soil")
+
+    # Agent decision
+    risk, status, icon, color, reasons, actions = plant_care_agent(
+        temp_stats["latest"],
+        hum_stats["latest"],
+        soil_stats["latest"]
+    )
+
+    summary_html.value = f"""
+    <div class="dash-card" style="border-left:8px solid {color};">
+        <div style="font-size:28px;font-weight:900;color:{color};">
+            {icon} Plant Status: {status}
+        </div>
+
+        <div style="font-size:44px;font-weight:900;color:#111827;margin-top:10px;">
+            Risk Score: {risk}%
+        </div>
+
+        <div style="font-size:14px;color:#64748b;margin-top:8px;">
+            Analysis is based on Firebase sensor records using Spark MapReduce and Plant Care Agent.
+        </div>
+    </div>
+    """
+
+    metrics_html.value = f"""
+    <div style="display:flex;gap:18px;margin-top:22px;">
+        <div class="metric-card" style="flex:1;">
+            <div style="font-size:30px;">🌡️</div>
+            <div class="metric-title">Temperature</div>
+            <div class="metric-value">{temp_stats['latest']} °C</div>
+            <div class="metric-small">
+                Average: {temp_stats['avg']} °C<br>
+                Min: {temp_stats['min']} | Max: {temp_stats['max']}
+            </div>
+        </div>
+
+        <div class="metric-card" style="flex:1;">
+            <div style="font-size:30px;">💧</div>
+            <div class="metric-title">Humidity</div>
+            <div class="metric-value">{hum_stats['latest']} %</div>
+            <div class="metric-small">
+                Average: {hum_stats['avg']} %<br>
+                Min: {hum_stats['min']} | Max: {hum_stats['max']}
+            </div>
+        </div>
+
+        <div class="metric-card" style="flex:1;">
+            <div style="font-size:30px;">🌱</div>
+            <div class="metric-title">Soil Moisture</div>
+            <div class="metric-value">{soil_stats['latest']} %</div>
+            <div class="metric-small">
+                Average: {soil_stats['avg']} %<br>
+                Min: {soil_stats['min']} | Max: {soil_stats['max']}
+            </div>
+        </div>
+    </div>
+    """
+
+    reasons_html = "".join([f"<li>{r}</li>" for r in reasons])
+    actions_html = "".join([f"<li>{a}</li>" for a in actions])
+
+    recommendations_html.value = f"""
+    <div class="dash-card" style="margin-top:22px;">
+        <div style="font-size:22px;font-weight:900;color:#14532d;margin-bottom:10px;">
+            Plant Care Agent Recommendations
+        </div>
+
+        <div style="font-size:15px;font-weight:800;color:#334155;margin-bottom:8px;">
+            Detected Reasons:
+        </div>
+
+        <ul style="color:#334155;font-size:14px;line-height:1.8;">
+            {reasons_html}
+        </ul>
+
+        <div style="font-size:15px;font-weight:800;color:#334155;margin-bottom:8px;">
+            Suggested Actions:
+        </div>
+
+        <ul style="color:#334155;font-size:14px;line-height:1.8;">
+            {actions_html}
+        </ul>
+    </div>
+    """
+
+    df = pd.DataFrame(samples)
+
+    for col_name in ["temperature", "humidity", "soil"]:
+        df[col_name] = pd.to_numeric(df[col_name], errors="coerce")
+
+    df["time"] = df["sensor_timestamp"].apply(
+        lambda x: str(x)[11:16] if isinstance(x, str) else ""
+    )
+
+    with chart_output:
+        chart_output.clear_output()
+
+        plt.figure(figsize=(12, 4))
+        plt.plot(df["time"], df["temperature"], marker="o", label="Temperature")
+        plt.plot(df["time"], df["humidity"], marker="o", label="Humidity")
+        plt.plot(df["time"], df["soil"], marker="o", label="Soil Moisture")
+
+        plt.title("Sensor Data Trends From Firebase")
+        plt.xlabel("Time")
+        plt.ylabel("Value")
+        plt.xticks(rotation=45)
+        plt.legend()
+        plt.grid(True)
+        plt.tight_layout()
+        plt.show()
+
+    with table_output:
+        table_output.clear_output()
+        display(df[["sensor_timestamp", "temperature", "humidity", "soil", "saved_at"]].tail(10))
+
+btn_refresh_dashboard.on_click(render_dashboard)
+
+# =====================================================
+# 9) FINAL LAYOUT
+# =====================================================
+
+dashboard_screen = widgets.VBox([
+    dashboard_style,
+    header,
+    widgets.HBox(
+        [samples_slider, btn_refresh_dashboard],
+        layout=Layout(justify_content="space-between", align_items="center")
+    ),
+    widgets.HTML("<br>"),
+    summary_html,
+    metrics_html,
+    recommendations_html,
+    widgets.HTML("<br>"),
+    widgets.VBox([chart_output], layout=Layout(margin="10px 0")),
+    widgets.HTML("<h3 style='color:#14532d;'>Last Saved Sensor Records</h3>"),
+    table_output
+], layout=Layout(width="98%", margin="10px auto"))
+
+dashboard_screen.add_class("dashboard-shell")
+
+render_dashboard()
+display(dashboard_screen)
